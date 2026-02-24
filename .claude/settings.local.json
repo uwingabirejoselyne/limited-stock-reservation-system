@@ -5,7 +5,9 @@
       "Bash(npm install:*)",
       "Bash(npx prisma init:*)",
       "Bash(npx tsc:*)",
-      "Bash(npx prisma validate:*)"
+      "Bash(npx prisma validate:*)",
+      "Bash(npx jest --no-coverage)",
+      "Bash(npx vitest run)"
     ]
   }
 }
