@@ -1,9 +1,6 @@
 // This is your Prisma schema file,
 // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
 generator client {
   provider = "prisma-client"
   output   = "../src/generated/prisma"
@@ -11,4 +8,134 @@ generator client {
 
 datasource db {
   provider = "postgresql"
+}
+
+// ---------------------------------------------------------------------------
+// Enums
+// ---------------------------------------------------------------------------
+
+enum ReservationStatus {
+  PENDING
+  COMPLETED
+  EXPIRED
+  CANCELLED
+}
+
+enum OrderStatus {
+  PENDING
+  CONFIRMED
+  CANCELLED
+}
+
+enum InventoryChangeType {
+  RESERVED   // stock deducted when reservation is created
+  RELEASED   // stock restored when reservation expires or is cancelled
+  PURCHASED  // stock confirmed when checkout completes
+  ADJUSTMENT // manual admin adjustment
+}
+
+// ---------------------------------------------------------------------------
+// Models
+// ---------------------------------------------------------------------------
+
+model User {
+  id        String   @id @default(uuid())
+  email     String   @unique
+  name      String
+  password  String   // hashed
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  reservations Reservation[]
+  orders       Order[]
+
+  @@map("users")
+}
+
+model Product {
+  id          String   @id @default(uuid())
+  name        String
+  description String?
+  price       Decimal  @db.Decimal(10, 2)
+  stock       Int      // current available stock (never < 0)
+  totalStock  Int      @map("total_stock") // original quantity for reference
+  isActive    Boolean  @default(true) @map("is_active")
+  // version is used for optimistic locking:
+  // UPDATE products SET stock = stock - qty, version = version + 1
+  // WHERE id = ? AND version = ? AND stock >= qty
+  version     Int      @default(0)
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  reservations  Reservation[]
+  orders        Order[]
+  inventoryLogs InventoryLog[]
+
+  @@index([stock])
+  @@index([isActive])
+  @@map("products")
+}
+
+model Reservation {
+  id        String            @id @default(uuid())
+  userId    String            @map("user_id")
+  productId String            @map("product_id")
+  quantity  Int
+  status    ReservationStatus @default(PENDING)
+  expiresAt DateTime          @map("expires_at")
+  createdAt DateTime          @default(now()) @map("created_at")
+  updatedAt DateTime          @updatedAt @map("updated_at")
+
+  user          User           @relation(fields: [userId], references: [id])
+  product       Product        @relation(fields: [productId], references: [id])
+  order         Order?
+  inventoryLogs InventoryLog[]
+
+  // Prevent a user from holding duplicate PENDING reservations for the same product
+  @@unique([userId, productId, status], name: "unique_pending_reservation")
+  @@index([status, expiresAt]) // expiration job query
+  @@index([userId, status])
+  @@index([productId, status])
+  @@map("reservations")
+}
+
+model Order {
+  id            String      @id @default(uuid())
+  userId        String      @map("user_id")
+  reservationId String      @unique @map("reservation_id") // 1-to-1 with Reservation
+  productId     String      @map("product_id")
+  quantity      Int
+  totalPrice    Decimal     @map("total_price") @db.Decimal(10, 2)
+  status        OrderStatus @default(CONFIRMED)
+  createdAt     DateTime    @default(now()) @map("created_at")
+  updatedAt     DateTime    @updatedAt @map("updated_at")
+
+  user        User        @relation(fields: [userId], references: [id])
+  reservation Reservation @relation(fields: [reservationId], references: [id])
+  product     Product     @relation(fields: [productId], references: [id])
+
+  @@index([userId])
+  @@index([productId])
+  @@map("orders")
+}
+
+// InventoryLog is an append-only audit trail — never update or delete rows here.
+model InventoryLog {
+  id             String              @id @default(uuid())
+  productId      String              @map("product_id")
+  reservationId  String?             @map("reservation_id")
+  orderId        String?             @map("order_id")
+  changeType     InventoryChangeType @map("change_type")
+  quantityChange Int                 @map("quantity_change") // negative = deduction
+  stockBefore    Int                 @map("stock_before")
+  stockAfter     Int                 @map("stock_after")
+  reason         String?
+  createdAt      DateTime            @default(now()) @map("created_at")
+
+  product     Product      @relation(fields: [productId], references: [id])
+  reservation Reservation? @relation(fields: [reservationId], references: [id])
+
+  @@index([productId])
+  @@index([reservationId])
+  @@map("inventory_logs")
 }
