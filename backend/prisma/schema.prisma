@@ -91,8 +91,12 @@ model Reservation {
   order         Order?
   inventoryLogs InventoryLog[]
 
-  // Prevent a user from holding duplicate PENDING reservations for the same product
-  @@unique([userId, productId, status], name: "unique_pending_reservation")
+  // NOTE: duplicate-PENDING prevention is enforced at the application layer
+  // inside a serializable transaction (Prisma doesn't support partial indexes).
+  // A PostgreSQL partial index is added in the initial migration SQL:
+  //   CREATE UNIQUE INDEX unique_pending_reservation
+  //   ON reservations (user_id, product_id) WHERE status = 'PENDING';
+  @@index([userId, productId])
   @@index([status, expiresAt]) // expiration job query
   @@index([userId, status])
   @@index([productId, status])

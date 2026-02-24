@@ -8,7 +8,8 @@ const logFormat = printf(({ level, message, timestamp: ts, stack }) => {
 });
 
 export const logger = winston.createLogger({
-  level: config.nodeEnv === 'production' ? 'info' : 'debug',
+  // 'http' lets Morgan request logs through; 'debug' keeps verbose dev logs
+  level: config.nodeEnv === 'production' ? 'http' : 'debug',
   format: combine(
     timestamp({ format: 'YYYY-MM-DD HH:mm:ss' }),
     errors({ stack: true }),
