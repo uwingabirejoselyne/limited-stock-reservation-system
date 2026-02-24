@@ -1,16 +1,17 @@
 import 'dotenv/config';
 import { config } from './lib/config';
 import { logger } from './utils/logger';
+import { startScheduler } from './jobs/scheduler';
 
 async function bootstrap() {
-  // App and routes will be wired up in the next step
   const { app } = await import('./app');
 
   app.listen(config.port, () => {
-    logger.info(
-      `Server running on port ${config.port} [${config.nodeEnv}]`
-    );
+    logger.info(`Server running on port ${config.port} [${config.nodeEnv}]`);
   });
+
+  // Start the background job that expires stale reservations
+  startScheduler();
 }
 
 bootstrap().catch((err) => {
