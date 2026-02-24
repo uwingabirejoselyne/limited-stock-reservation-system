@@ -1,10 +1,35 @@
 import { Router } from 'express';
-import { reserveHandler } from '../controllers/reservation.controller';
-import { validateBody } from '../middleware/validate';
-import { reserveSchema } from '../schemas/reservation.schema';
+import {
+  reserveHandler,
+  listReservationsHandler,
+  getReservationHandler,
+} from '../controllers/reservation.controller';
+import { validateBody, validateParams, validateQuery, uuidParam } from '../middleware/validate';
+import { reserveSchema, reservationQuerySchema } from '../schemas/reservation.schema';
 import { reserveRateLimiter } from '../middleware/rateLimiter';
 
 export const reservationsRouter = Router();
+
+/**
+ * GET /api/reservations
+ * List reservations with pagination, filtering, and sorting.
+ * Query: page, limit, sortBy, sortOrder, userId, productId, status
+ */
+reservationsRouter.get(
+  '/',
+  validateQuery(reservationQuerySchema),
+  listReservationsHandler
+);
+
+/**
+ * GET /api/reservations/:id
+ * Get a single reservation by ID.
+ */
+reservationsRouter.get(
+  '/:id',
+  validateParams(uuidParam),
+  getReservationHandler
+);
 
 /**
  * POST /api/reservations
@@ -13,7 +38,7 @@ export const reservationsRouter = Router();
  */
 reservationsRouter.post(
   '/',
-  reserveRateLimiter,           // tight rate limit (10 req/min per IP)
-  validateBody(reserveSchema),  // Zod validation
+  reserveRateLimiter,
+  validateBody(reserveSchema),
   reserveHandler
 );

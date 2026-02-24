@@ -1,3 +1,4 @@
+import { Prisma } from '../generated/prisma/client';
 import { prisma } from '../lib/prisma';
 import { config } from '../lib/config';
 import { metrics } from '../lib/metrics';
@@ -7,7 +8,11 @@ import {
   ReservationStatus,
   InventoryChangeType,
 } from '../generated/prisma/client';
-import type { ReserveInput } from '../schemas/reservation.schema';
+import type {
+  ReserveInput,
+  ReservationQuery,
+} from '../schemas/reservation.schema';
+import type { PaginationMeta } from '../types';
 
 // ─── Types returned to the controller ────────────────────────────────────────
 
@@ -176,3 +181,82 @@ class OptimisticLockError extends Error {
 
 const sleep = (ms: number) =>
   new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+// ─── List reservations ────────────────────────────────────────────────────────
+
+export interface ReservationItem {
+  id: string;
+  userId: string;
+  productId: string;
+  productName: string;
+  quantity: number;
+  status: string;
+  expiresAt: Date;
+  createdAt: Date;
+}
+
+export interface ReservationListResult {
+  reservations: ReservationItem[];
+  meta: PaginationMeta;
+}
+
+export async function listReservations(
+  query: ReservationQuery
+): Promise<ReservationListResult> {
+  const { page, limit, sortBy, sortOrder, userId, productId, status } = query;
+
+  const where: Prisma.ReservationWhereInput = {};
+  if (userId) where.userId = userId;
+  if (productId) where.productId = productId;
+  if (status) where.status = status as ReservationStatus;
+
+  const skip = (page - 1) * limit;
+
+  const [total, rows] = await prisma.$transaction([
+    prisma.reservation.count({ where }),
+    prisma.reservation.findMany({
+      where,
+      include: { product: { select: { name: true } } },
+      orderBy: { [sortBy]: sortOrder },
+      skip,
+      take: limit,
+    }),
+  ]);
+
+  const reservations: ReservationItem[] = rows.map((r) => ({
+    id: r.id,
+    userId: r.userId,
+    productId: r.productId,
+    productName: r.product.name,
+    quantity: r.quantity,
+    status: r.status,
+    expiresAt: r.expiresAt,
+    createdAt: r.createdAt,
+  }));
+
+  return {
+    reservations,
+    meta: { total, page, limit, totalPages: Math.ceil(total / limit) },
+  };
+}
+
+// ─── Single reservation ───────────────────────────────────────────────────────
+
+export async function getReservation(id: string): Promise<ReservationItem> {
+  const r = await prisma.reservation.findUnique({
+    where: { id },
+    include: { product: { select: { name: true } } },
+  });
+  if (!r) throw new NotFoundError('Reservation');
+
+  return {
+    id: r.id,
+    userId: r.userId,
+    productId: r.productId,
+    productName: r.product.name,
+    quantity: r.quantity,
+    status: r.status,
+    expiresAt: r.expiresAt,
+    createdAt: r.createdAt,
+  };
+}
