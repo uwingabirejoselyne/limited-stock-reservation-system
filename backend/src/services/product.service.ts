@@ -42,8 +42,8 @@ export async function listProducts(
 
   const skip = (page - 1) * limit;
 
-  // Parallel count + data fetch in one round-trip
-  const [total, rows] = await prisma.$transaction([
+  // Parallel count + data fetch — plain Promise.all is fine for read-only queries
+  const [total, rows] = await Promise.all([
     prisma.product.count({ where }),
     prisma.product.findMany({
       where,

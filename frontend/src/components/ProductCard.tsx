@@ -6,7 +6,6 @@ import { StockIndicator } from '@/components/StockIndicator';
 import { CountdownTimer } from '@/components/CountdownTimer';
 import { useReservation } from '@/hooks/useReservation';
 import { useCountdown } from '@/hooks/useCountdown';
-import { DEMO_USER_ID } from '@/lib/user';
 import { cn } from '@/lib/utils';
 import type { Product } from '@/types/api';
 
@@ -66,7 +65,7 @@ export function ProductCard({ product }: ProductCardProps) {
           <Button
             className="w-full"
             disabled={isSoldOut}
-            onClick={() => void reserve(product.id, 1, DEMO_USER_ID)}
+            onClick={() => void reserve(product.id, 1)}
           >
             <ShoppingCart className="h-4 w-4" />
             {isSoldOut ? 'Sold Out' : 'Reserve 1 Unit'}
@@ -95,6 +94,14 @@ export function ProductCard({ product }: ProductCardProps) {
             <span className="font-medium text-white">Reserved:</span>{' '}
             {state.data.quantity} × {product.name}
           </div>
+
+          {/* Inline checkout error — stays in reserved state so user can retry */}
+          {state.status === 'reserved' && state.checkoutError && (
+            <div className="flex items-start gap-2 rounded-lg bg-red-950/50 border border-red-800 p-3 text-sm text-red-300">
+              <AlertCircle className="h-4 w-4 mt-0.5 shrink-0" />
+              <span>{state.checkoutError}</span>
+            </div>
+          )}
 
           <Button
             className="w-full"

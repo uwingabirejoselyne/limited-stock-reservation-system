@@ -51,7 +51,11 @@ export async function createReservation(
   for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
     try {
       return await prisma.$transaction(async (tx) => {
-        // ── 1. Fetch product ────────────────────────────────────────────────
+        // ── 1. Verify user exists ───────────────────────────────────────────
+        const user = await tx.user.findUnique({ where: { id: input.userId } });
+        if (!user) throw new NotFoundError('User');
+
+        // ── 2. Fetch product ────────────────────────────────────────────────
         const product = await tx.product.findUnique({
           where: { id: input.productId },
         });
@@ -64,7 +68,7 @@ export async function createReservation(
             `Only ${product.stock} unit(s) left in stock`
           );
 
-        // ── 2. Duplicate PENDING reservation guard ──────────────────────────
+        // ── 3. Duplicate PENDING reservation guard ──────────────────────────
         const existing = await tx.reservation.findFirst({
           where: {
             userId: input.userId,
@@ -114,7 +118,8 @@ export async function createReservation(
             userId: input.userId,
             productId: input.productId,
             quantity: input.quantity,
-            status: ReservationStatus.PENDING,
+            // status defaults to PENDING in the schema — omitting it avoids a
+            // Prisma 7 XOR-mode ambiguity with the checked (relation) input type
             expiresAt,
           },
         });
@@ -212,7 +217,7 @@ export async function listReservations(
 
   const skip = (page - 1) * limit;
 
-  const [total, rows] = await prisma.$transaction([
+  const [total, rows] = await Promise.all([
     prisma.reservation.count({ where }),
     prisma.reservation.findMany({
       where,

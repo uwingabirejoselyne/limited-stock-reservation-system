@@ -1,6 +1,7 @@
 import { useState, useCallback } from 'react';
 import { createReservation, checkout } from '@/api/reservations';
 import { ApiError } from '@/api/client';
+import { ensureUser } from '@/lib/user';
 import type { ReservationResult, OrderResult } from '@/types/api';
 
 // ─── Discriminated union state machine ───────────────────────────────────────
@@ -8,7 +9,7 @@ import type { ReservationResult, OrderResult } from '@/types/api';
 type ReservationState =
   | { status: 'idle' }
   | { status: 'reserving' }
-  | { status: 'reserved'; data: ReservationResult }
+  | { status: 'reserved'; data: ReservationResult; checkoutError?: string }
   | { status: 'checking-out'; data: ReservationResult }
   | { status: 'completed'; order: OrderResult }
   | { status: 'expired' }
@@ -16,7 +17,7 @@ type ReservationState =
 
 interface UseReservationResult {
   state: ReservationState;
-  reserve: (productId: string, quantity: number, userId: string) => Promise<void>;
+  reserve: (productId: string, quantity: number) => Promise<void>;
   completeCheckout: () => Promise<void>;
   markExpired: () => void;
   reset: () => void;
@@ -26,9 +27,10 @@ export function useReservation(): UseReservationResult {
   const [state, setState] = useState<ReservationState>({ status: 'idle' });
 
   const reserve = useCallback(
-    async (productId: string, quantity: number, userId: string) => {
+    async (productId: string, quantity: number) => {
       setState({ status: 'reserving' });
       try {
+        const userId = await ensureUser();
         const res = await createReservation({ productId, quantity, userId });
         setState({ status: 'reserved', data: res.data });
       } catch (err) {
@@ -48,13 +50,11 @@ export function useReservation(): UseReservationResult {
       const res = await checkout({ reservationId: reservationData.reservationId });
       setState({ status: 'completed', order: res.data });
     } catch (err) {
-      const message =
+      const checkoutError =
         err instanceof ApiError ? err.message : 'Checkout failed — try again';
-      // Return to 'reserved' so user can retry checkout
-      setState({ status: 'reserved', data: reservationData });
-      // Surface the error briefly via a temporary error state isn't ideal here
-      // so we keep the reservation alive and show the error inline
-      setState({ status: 'error', message });
+      // Stay in 'reserved' so the countdown keeps running and the user can retry.
+      // checkoutError is rendered inline by ProductCard.
+      setState({ status: 'reserved', data: reservationData, checkoutError });
     }
   }, [state]);
 

@@ -13,8 +13,20 @@ export function validate<T>(schema: ZodSchema<T>, part: RequestPart = 'body') {
         .join('; ');
       return next(new ValidationError(message));
     }
-    // Replace the request part with the parsed (coerced/stripped) value
-    (req as unknown as Record<string, unknown>)[part] = result.data;
+    // Replace the request part with the parsed (coerced/stripped) value.
+    // In Express 5, req.query and req.params are getter-only on the prototype,
+    // so direct assignment throws. Use Object.defineProperty to shadow them with
+    // an own data property on this specific request instance.
+    if (part === 'body') {
+      req.body = result.data;
+    } else {
+      Object.defineProperty(req, part, {
+        value: result.data,
+        writable: true,
+        configurable: true,
+        enumerable: true,
+      });
+    }
     next();
   };
 }

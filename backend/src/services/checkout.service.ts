@@ -3,7 +3,6 @@ import { metrics } from '../lib/metrics';
 import { ConflictError, GoneError, NotFoundError } from '../utils/errors';
 import {
   ReservationStatus,
-  OrderStatus,
   InventoryChangeType,
 } from '../generated/prisma/client';
 import type { CheckoutInput } from '../schemas/reservation.schema';
@@ -80,7 +79,8 @@ export async function processCheckout(
         productId: reservation.productId,
         quantity: reservation.quantity,
         totalPrice,
-        status: OrderStatus.CONFIRMED,
+        // status defaults to CONFIRMED in the schema — omitting it avoids the
+        // same Prisma 7 XOR-mode ambiguity fixed in reservation.service.ts
       },
     });
 
